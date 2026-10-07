@@ -9,7 +9,7 @@ import "C"
 
 import (
 	"os"
-	"runtime/debug"
+	"runtime"
 	"strings"
 	"unsafe"
 
@@ -91,8 +91,8 @@ func QueryStats(outboundTag *C.char) *C.char {
 
 //export CurrentRSSBytes
 func CurrentRSSBytes() C.ulonglong {
-	var stats debug.MemStats
-	debug.ReadMemStats(&stats)
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
 	return C.ulonglong(stats.Sys)
 }
 
