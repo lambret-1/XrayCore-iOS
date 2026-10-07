@@ -73,16 +73,21 @@ echo -e "${GREEN}模拟器静态库编译完成: $(du -sh $OUTPUT_DIR/libxray-io
 
 # 创建 XCFramework
 echo -e "${YELLOW}创建 XCFramework...${NC}"
+
+# 创建单独的头文件目录（避免 -headers 复制整个目录导致静态库冲突）
+HEADERS_DIR="$OUTPUT_DIR/headers"
+mkdir -p "$HEADERS_DIR"
+cp "$OUTPUT_DIR/libxray-ios-arm64.h" "$HEADERS_DIR/libxray.h"
+
+# 先删除可能存在的旧 XCFramework
+rm -rf "$XCFRAMEWORK_DIR"
+
 xcodebuild -create-xcframework \
     -library "$OUTPUT_DIR/libxray-ios-arm64.a" \
-    -headers "$OUTPUT_DIR/" \
+    -headers "$HEADERS_DIR" \
     -library "$OUTPUT_DIR/libxray-ios-simulator.a" \
-    -headers "$OUTPUT_DIR/" \
+    -headers "$HEADERS_DIR" \
     -output "$XCFRAMEWORK_DIR"
-
-# 复制头文件到正确位置
-cp "$OUTPUT_DIR/libxray-ios-arm64.h" "$XCFRAMEWORK_DIR/ios-arm64/Headers/libxray.h"
-cp "$OUTPUT_DIR/libxray-ios-arm64.h" "$XCFRAMEWORK_DIR/ios-arm64-simulator/Headers/libxray.h"
 
 echo -e "${GREEN}=== 编译完成 ===${NC}"
 echo "XCFramework: $XCFRAMEWORK_DIR"
