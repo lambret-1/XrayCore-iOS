@@ -10,6 +10,7 @@ import "C"
 import (
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -45,15 +46,17 @@ func StartXray(configStr *C.char, tunFd C.int) C.int {
 		return -3
 	}
 
+	// 关键：必须在 instance.Start() 之前设置 TUN fd 环境变量
+	// Xray-core Darwin TUN 入站在 NewTun() 中读取 "xray.tun.fd" 获取外部 fd
+	// 若在 Start 之后设置，TUN 入站已尝试创建新接口导致启动失败（错误码-4）
+	os.Setenv("xray.tun.fd", strconv.Itoa(int(tunFd)))
+
 	// 启动 Xray
 	if err := instance.Start(); err != nil {
 		return -4
 	}
 
 	xrayInstance = instance
-
-	// 设置 TUN 文件描述符（通过环境变量传递给 tun 入站）
-	os.Setenv("XRAY_TUN_FD", string(rune(tunFd)))
 
 	return 0
 }
