@@ -80,7 +80,7 @@ jobs:
           echo "打包完成: $(du -sh Xray.xcframework.zip | cut -f1)"
 
       - name: 上传编译产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Xray.xcframework
           path: build/Xray.xcframework.zip
