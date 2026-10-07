@@ -1,0 +1,114 @@
+name: iOS 静态库编译
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: 编译 iOS XCFramework
+    runs-on: macos-14
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Go 环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: 安装 Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: 验证编译环境
+        run: |
+          echo "Go版本: $(go version)"
+          echo "Xcode版本: $(xcodebuild -version)"
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "Clang: $(clang --version | head -1)"
+
+      - name: 下载 Go 依赖
+        run: go mod download
+
+      - name: 编译验证（Linux 风格）
+        run: go build ./...
+
+      - name: 赋予编译脚本执行权限
+        run: chmod +x build_ios.sh
+
+      - name: 编译 iOS XCFramework
+        run: ./build_ios.sh
+        timeout-minutes: 30
+
+      - name: 验证编译产物
+        run: |
+          echo "=== 编译产物验证 ==="
+          if [ -d "build/Xray.xcframework" ]; then
+            echo "✅ XCFramework 存在"
+            echo "真机架构: $(lipo -info build/Xray.xcframework/ios-arm64/libxray.a 2>/dev/null || echo '未知')"
+            echo "模拟器架构: $(lipo -info build/Xray.xcframework/ios-arm64-simulator/libxray.a 2>/dev/null || echo '未知')"
+            echo "真机大小: $(du -sh build/Xray.xcframework/ios-arm64/libxray.a | cut -f1)"
+            echo "模拟器大小: $(du -sh build/Xray.xcframework/ios-arm64-simulator/libxray.a | cut -f1)"
+            echo "头文件: $(ls build/Xray.xcframework/ios-arm64/Headers/)"
+          else
+            echo "❌ XCFramework 不存在"
+            exit 1
+          fi
+
+      - name: 打包编译产物
+        run: |
+          cd build
+          zip -r Xray.xcframework.zip Xray.xcframework
+          echo "打包完成: $(du -sh Xray.xcframework.zip | cut -f1)"
+
+      - name: 上传编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xray.xcframework
+          path: build/Xray.xcframework.zip
+          retention-days: 30
+
+      - name: 获取版本号
+        id: version
+        run: |
+          VERSION=$(date +'%Y.%m.%d')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: 创建 Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: XrayCore iOS v${{ steps.version.outputs.version }}
+          body: |
+            ## 裁剪版 Xray 核心 iOS 静态库
+
+            仅保留 VLESS/VMess 协议，最小化内存占用。
+
+            ### 编译信息
+            - Go 版本: 1.22
+            - Xcode 版本: 15.4
+            - iOS SDK: 最新
+            - 构建号: ${{ steps.version.outputs.BUILD_NUMBER }}
+
+            ### 使用方法
+            下载 `Xray.xcframework.zip`，解压后拖入 Xcode 项目。
+
+            ### C 接口
+            - `StartXray(configStr, tunFd)` - 启动 Xray
+            - `StopXray()` - 停止 Xray
+            - `GetVersion()` - 获取版本
+            - `FreeString(s)` - 释放字符串
+            - `QueryStats(outboundTag)` - 查询流量统计
+            - `CurrentRSSBytes()` - 获取内存使用
+          files: build/Xray.xcframework.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
