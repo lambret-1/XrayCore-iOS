@@ -71,6 +71,16 @@ lipo -create "$OUTPUT_DIR/libxray-ios-sim-arm64.a" "$OUTPUT_DIR/libxray-ios-sim-
 
 echo -e "${GREEN}模拟器静态库编译完成: $(du -sh $OUTPUT_DIR/libxray-ios-simulator.a | cut -f1)${NC}"
 
+# 创建独立目录，将静态库重命名为统一的 libxray.a（XcodeGen 期望此文件名）
+echo -e "${YELLOW}规范化静态库文件名...${NC}"
+DEVICE_LIB_DIR="$OUTPUT_DIR/device-lib"
+SIM_LIB_DIR="$OUTPUT_DIR/sim-lib"
+mkdir -p "$DEVICE_LIB_DIR" "$SIM_LIB_DIR"
+cp "$OUTPUT_DIR/libxray-ios-arm64.a" "$DEVICE_LIB_DIR/libxray.a"
+cp "$OUTPUT_DIR/libxray-ios-simulator.a" "$SIM_LIB_DIR/libxray.a"
+echo "真机静态库: $(du -sh $DEVICE_LIB_DIR/libxray.a | cut -f1)"
+echo "模拟器静态库: $(du -sh $SIM_LIB_DIR/libxray.a | cut -f1)"
+
 # 创建 XCFramework
 echo -e "${YELLOW}创建 XCFramework...${NC}"
 
@@ -83,9 +93,9 @@ cp "$OUTPUT_DIR/libxray-ios-arm64.h" "$HEADERS_DIR/libxray.h"
 rm -rf "$XCFRAMEWORK_DIR"
 
 xcodebuild -create-xcframework \
-    -library "$OUTPUT_DIR/libxray-ios-arm64.a" \
+    -library "$DEVICE_LIB_DIR/libxray.a" \
     -headers "$HEADERS_DIR" \
-    -library "$OUTPUT_DIR/libxray-ios-simulator.a" \
+    -library "$SIM_LIB_DIR/libxray.a" \
     -headers "$HEADERS_DIR" \
     -output "$XCFRAMEWORK_DIR"
 
