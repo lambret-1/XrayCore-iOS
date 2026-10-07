@@ -91,7 +91,23 @@ xcodebuild -create-xcframework \
 
 echo -e "${GREEN}=== 编译完成 ===${NC}"
 echo "XCFramework: $XCFRAMEWORK_DIR"
-echo "真机版本: $(du -sh $XCFRAMEWORK_DIR/ios-arm64/libxray.a | cut -f1)"
-echo "模拟器版本: $(du -sh $XCFRAMEWORK_DIR/ios-arm64-simulator/libxray.a | cut -f1)"
+
+# 自动检测真机和模拟器目录名（xcodebuild 可能使用不同命名）
+真机目录=$(find "$XCFRAMEWORK_DIR" -maxdepth 1 -type d -name "ios-arm64" -o -name "ios-arm64_*" | grep -v simulator | head -1)
+模拟器目录=$(find "$XCFRAMEWORK_DIR" -maxdepth 1 -type d -name "*simulator*" | head -1)
+
+if [ -n "$真机目录" ] && [ -f "$真机目录/libxray.a" ]; then
+    echo "真机版本: $(du -sh $真机目录/libxray.a | cut -f1)"
+else
+    echo "⚠️  未找到真机静态库，XCFramework 目录结构："
+    ls -la "$XCFRAMEWORK_DIR/"
+fi
+
+if [ -n "$模拟器目录" ] && [ -f "$模拟器目录/libxray.a" ]; then
+    echo "模拟器版本: $(du -sh $模拟器目录/libxray.a | cut -f1)"
+else
+    echo "⚠️  未找到模拟器静态库"
+fi
+
 echo ""
 echo "使用方法：将 Xray.xcframework 拖入 Xcode 项目，链接到 VPN 扩展 target"

@@ -52,11 +52,20 @@ jobs:
           echo "=== 编译产物验证 ==="
           if [ -d "build/Xray.xcframework" ]; then
             echo "✅ XCFramework 存在"
-            echo "真机架构: $(lipo -info build/Xray.xcframework/ios-arm64/libxray.a 2>/dev/null || echo '未知')"
-            echo "模拟器架构: $(lipo -info build/Xray.xcframework/ios-arm64-simulator/libxray.a 2>/dev/null || echo '未知')"
-            echo "真机大小: $(du -sh build/Xray.xcframework/ios-arm64/libxray.a | cut -f1)"
-            echo "模拟器大小: $(du -sh build/Xray.xcframework/ios-arm64-simulator/libxray.a | cut -f1)"
-            echo "头文件: $(ls build/Xray.xcframework/ios-arm64/Headers/)"
+            echo "目录结构:"
+            ls -la build/Xray.xcframework/
+            # 自动检测真机和模拟器目录
+            真机目录=$(find build/Xray.xcframework -maxdepth 1 -type d -name "ios-arm64" -o -name "ios-arm64_*" | grep -v simulator | head -1)
+            模拟器目录=$(find build/Xray.xcframework -maxdepth 1 -type d -name "*simulator*" | head -1)
+            if [ -n "$真机目录" ] && [ -f "$真机目录/libxray.a" ]; then
+              echo "真机架构: $(lipo -info $真机目录/libxray.a 2>/dev/null || echo '未知')"
+              echo "真机大小: $(du -sh $真机目录/libxray.a | cut -f1)"
+            fi
+            if [ -n "$模拟器目录" ] && [ -f "$模拟器目录/libxray.a" ]; then
+              echo "模拟器架构: $(lipo -info $模拟器目录/libxray.a 2>/dev/null || echo '未知')"
+              echo "模拟器大小: $(du -sh $模拟器目录/libxray.a | cut -f1)"
+            fi
+            echo "头文件: $(find build/Xray.xcframework -name "*.h" | head -5)"
           else
             echo "❌ XCFramework 不存在"
             exit 1
