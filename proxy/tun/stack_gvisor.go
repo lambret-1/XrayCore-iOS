@@ -24,15 +24,17 @@ const (
 	defaultNIC tcpip.NICID = 1
 
 	// iOS 移动网络优化：减小 TCP 收发缓冲区
-	// 原值 def=1MiB、max=8MiB/6MiB，多连接时内存膨胀明显
-	// iOS 网络带宽有限，1MiB 窗口足以跑满，256KB 起步足够日常浏览
+	// 第一版 def=256KiB/max=1MiB，测速峰值仍达 71MB 超 PacketTunnel 硬上限
+	// 第二版进一步降半：def=128KiB/max=512KiB
+	// iOS 移动网络 RTT~50ms，128KiB 窗口≈20Mbps 足够日常浏览，
+	// 512KiB 最大窗口≈80Mbps 也能覆盖大部分测速场景
 	tcpRXBufMinSize = tcp.MinBufferSize
-	tcpRXBufDefSize = 256 << 10 // 256KiB
-	tcpRXBufMaxSize = 1 << 20   // 1MiB
+	tcpRXBufDefSize = 128 << 10 // 128KiB
+	tcpRXBufMaxSize = 512 << 10 // 512KiB
 
 	tcpTXBufMinSize = tcp.MinBufferSize
-	tcpTXBufDefSize = 256 << 10 // 256KiB
-	tcpTXBufMaxSize = 1 << 20   // 1MiB
+	tcpTXBufDefSize = 128 << 10 // 128KiB
+	tcpTXBufMaxSize = 512 << 10 // 512KiB
 )
 
 // stackGVisor is ip stack implemented by gVisor package
