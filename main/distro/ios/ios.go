@@ -8,11 +8,12 @@ import (
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
 
 	// 本应用实际使用的功能模块（TUN 隧道 + VLESS/VMess 出站 + DNS + 路由）
+	// 注意：不导入 app/stats —— 流量统计在 TUN 模式下不可用，
+	// QueryStats C 接口直接返回空 JSON，stats 模块完全无用，移除省内存
 	_ "github.com/xtls/xray-core/app/dns"
 	_ "github.com/xtls/xray-core/app/log"
 	_ "github.com/xtls/xray-core/app/policy"
 	_ "github.com/xtls/xray-core/app/router"
-	_ "github.com/xtls/xray-core/app/stats"
 
 	// Fix dependency cycle caused by core import in internet package
 	_ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"
