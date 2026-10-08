@@ -10,16 +10,27 @@ import "C"
 import (
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"unsafe"
 
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf/serial"
-	_ "github.com/xtls/xray-core/main/distro/all"
+	_ "github.com/xtls/xray-core/main/distro/ios"
 )
 
 var xrayInstance *core.Instance
+
+func init() {
+	// 限制 Go 堆内存软上限，防止运行时堆膨胀导致 RSS 持续走高
+	// 当前观察：启动 31MB，稳定 44MB。设 40MB 上限后 GC 会更积极地
+	// 回收并归还内存给系统，目标稳定在 36-40MB
+	debug.SetMemoryLimit(40 << 20) // 40MB
+
+	// GOGC 配合内存上限：100 表示堆达到活跃对象的 2 倍时触发 GC
+	debug.SetGCPercent(100)
+}
 
 //export StartXray
 func StartXray(configStr *C.char, tunFd C.int) C.int {
