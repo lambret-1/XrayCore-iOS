@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/xtls/xray-core/core"
@@ -21,15 +22,40 @@ import (
 )
 
 var xrayInstance *core.Instance
+var memoryScavengerStop chan struct{}
 
 func init() {
 	// 限制 Go 堆内存软上限，防止运行时堆膨胀导致 RSS 持续走高
-	// 当前观察：启动 31MB，稳定 44MB。设 40MB 上限后 GC 会更积极地
-	// 回收并归还内存给系统，目标稳定在 36-40MB
 	debug.SetMemoryLimit(40 << 20) // 40MB
 
 	// GOGC 配合内存上限：100 表示堆达到活跃对象的 2 倍时触发 GC
 	debug.SetGCPercent(100)
+}
+
+// 定期强制归还未使用内存给 OS
+// Go 默认 scavenger 比较保守，测速后大量 buffer 被 GC 回收但堆内存不归还 OS，
+// 导致 Sys 值长期保持高位。定期 FreeOSMemory 强制 GC + madvise 归还。
+func startMemoryScavenger() {
+	memoryScavengerStop = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				debug.FreeOSMemory()
+			case <-memoryScavengerStop:
+				return
+			}
+		}
+	}()
+}
+
+func stopMemoryScavenger() {
+	if memoryScavengerStop != nil {
+		close(memoryScavengerStop)
+		memoryScavengerStop = nil
+	}
 }
 
 //export StartXray
@@ -69,6 +95,9 @@ func StartXray(configStr *C.char, tunFd C.int) C.int {
 
 	xrayInstance = instance
 
+	// 启动定期内存归还（每30秒强制 FreeOSMemory）
+	startMemoryScavenger()
+
 	return 0
 }
 
@@ -83,6 +112,11 @@ func StopXray() C.int {
 	}
 
 	xrayInstance = nil
+
+	// 停止内存回收 goroutine 并强制归还一次
+	stopMemoryScavenger()
+	debug.FreeOSMemory()
+
 	return 0
 }
 
