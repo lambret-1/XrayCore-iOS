@@ -8,6 +8,7 @@ package main
 import "C"
 
 import (
+	"log"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -25,15 +26,19 @@ var xrayInstance *core.Instance
 var memoryScavengerStop chan struct{}
 
 func init() {
-	// 限制 Go 堆内存软上限，防止运行时堆膨胀导致 RSS 持续走高
-	debug.SetMemoryLimit(40 << 20) // 40MB
+	// iOS Packet Tunnel 扩展硬性内存上限约 50MB（jetsam 阈值）
+	// Go 运行时软限制设为 28MB，留出约 22MB 给非 Go 内存
+	// （系统框架、代码段、gVisor 栈、CGO 等）
+	// 测速峰值 63MB 已超上限，必须压低 Go 堆目标
+	debug.SetMemoryLimit(28 << 20) // 28MB
 
-	// GOGC 配合内存上限：100 表示堆达到活跃对象的 2 倍时触发 GC
-	debug.SetGCPercent(100)
+	// GOGC=50：堆达到活跃对象的 1.5 倍时触发 GC（默认 100 为 2 倍）
+	// 更积极的 GC，降低堆峰值，CPU 开销在 VPN 场景可接受
+	debug.SetGCPercent(50)
 }
 
-// 定期强制归还未使用内存给 OS
-// Go 默认 scavenger 比较保守，测速后大量 buffer 被 GC 回收但堆内存不归还 OS，
+// 定期强制归还未使用内存给 OS，并输出详细 MemStats 诊断日志
+// Go 默认 scavenger 保守，测速后大量 buffer 被 GC 回收但堆内存不归还 OS，
 // 导致 Sys 值长期保持高位。定期 FreeOSMemory 强制 GC + madvise 归还。
 func startMemoryScavenger() {
 	memoryScavengerStop = make(chan struct{})
@@ -43,7 +48,29 @@ func startMemoryScavenger() {
 		for {
 			select {
 			case <-ticker.C:
+				var before runtime.MemStats
+				runtime.ReadMemStats(&before)
+
 				debug.FreeOSMemory()
+
+				var after runtime.MemStats
+				runtime.ReadMemStats(&after)
+
+				log.Printf("[MemScav] 回收前: HeapAlloc=%.1fMB HeapInuse=%.1fMB HeapIdle=%.1fMB HeapReleased=%.1fMB Sys=%.1fMB NumGC=%d Goroutines=%d",
+					float64(before.HeapAlloc)/1048576,
+					float64(before.HeapInuse)/1048576,
+					float64(before.HeapIdle)/1048576,
+					float64(before.HeapReleased)/1048576,
+					float64(before.Sys)/1048576,
+					before.NumGC,
+					runtime.NumGoroutine())
+				log.Printf("[MemScav] 回收后: HeapAlloc=%.1fMB HeapInuse=%.1fMB HeapIdle=%.1fMB HeapReleased=%.1fMB Sys=%.1fMB 归还=%.1fMB",
+					float64(after.HeapAlloc)/1048576,
+					float64(after.HeapInuse)/1048576,
+					float64(after.HeapIdle)/1048576,
+					float64(after.HeapReleased)/1048576,
+					float64(after.Sys)/1048576,
+					float64(before.HeapReleased-after.HeapReleased)/1048576)
 			case <-memoryScavengerStop:
 				return
 			}
@@ -95,7 +122,7 @@ func StartXray(configStr *C.char, tunFd C.int) C.int {
 
 	xrayInstance = instance
 
-	// 启动定期内存归还（每30秒强制 FreeOSMemory）
+	// 启动定期内存归还（每30秒强制 FreeOSMemory + 详细诊断日志）
 	startMemoryScavenger()
 
 	return 0
